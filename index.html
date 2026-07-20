@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>DRIVE AND AVOID — CrazyGames Build</title>
+  <style>
+    :root {
+      --bg: #222;
+      --panel: #333;
+      --border: #555;
+      --lane: #2f2f2f;
+      --lane-sep: #ffffff;
+      --accent: #4CAF50;
+      --accent-2: #2ecc71;
+      --warning: #f39c12;
+      --danger: #e74c3c;
+      --gold: #f1c40f;
+      --shadow: rgba(0, 0, 0, 0.6);
+      --overlay: rgba(0, 0, 0, 0.78);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      font-family: "Arial Black", Gadget, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      touch-action: manipulation;
+    }
+
+    body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;         /* no horizontal scroll */
+      overflow-y: auto;           /* allow vertical scroll if needed */
+      box-sizing: border-box;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      height: 55vh;               /* slightly reduced to leave more room for HUD */
+      min-height: 380px;
+      max-height: 600px;
+      background: var(--panel);
+      border: 4px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 0 24px var(--shadow);
+      overflow: hidden;
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--overlay);
+      color: #fff;
+      z-index: 30;
+      text-align: center;
+      padding: 18px;
+    }
+
+    .screen[hidden] { display: none; }
+
+    .screen-title {
+      font-size: clamp(28px, 6vw, 44px);
+      color: var(--gold);
+      text-shadow: 3px 3px 0 var(--danger);
+      margin: 0 0 12px 0;
+    }
+
+    .screen-btn {
+      padding: 12px 22px;
+      font-size: clamp(16px, 4vw, 18px);
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      min-width: 160px;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+      margin: 6px 0;
+    }
+
+    .screen-btn:active { transform: translateY(1px); }
+    .screen-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .screen-subtle { opacity: 0.85; font-weight: normal; }
+
+    #hudRow {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;            /* slightly smaller margins */
+      gap: 8px;
+      color: #fff;
+    }
+
+    #levelDisplay, #scoreDisplay {
+      font-size: clamp(14px, 3vw, 18px);
+      white-space: nowrap;
+    }
+
+    #distanceBar {
+      flex-grow: 1;
+      max-width: 420px;
+      height: 14px;               /* smaller bar */
+      background: #555;
+      border-radius: 10px;
+      overflow: hidden;
+      min-width: 100px;
+    }
+
+    #distanceProgress { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.1s; }
+
+    #controlsRow {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 0 10px;
+      box-sizing: border-box;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      padding: 8px 16px;         /* slightly smaller buttons */
+      font-size: clamp(16px, 4vw, 18px);
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+      flex: 1;
+      max-width: 200px;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+    }
+
+    .control-btn:active { transform: translateY(1px); }
+    .control-btn.shoot { background: #e74c3c; }
+
+    #livesContainer {
+      width: 100%;
+      max-width: 800px;
+      margin-top: 8px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 0 10px;
+      box-sizing: border-box;
+      color: #fff;
+    }
+
+    #healthBar { flex-grow: 1; height: 14px; background: #555; border-radius: 10px; overflow: hidden; position: relative; }
+    #healthProgress { height: 100%; width: 100%; background: linear-gradient(90deg, var(--danger), var(--warning)); transition: width 0.1s; }
+    #healthText { width: 110px; text-align: center; color: #fff; white-space: nowrap; font-size: clamp(14px, 3vw, 16px); }
+
+    /* Banner container – hidden by default, shown only on menu/game‑over/win */
+    #banner-container {
+      width: 100%;
+      max-width: 800px;
+      min-height: 50px;
+      margin-top: 6px;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .note { color: #ddd; font-size: clamp(10px, 2.5vw, 12px); margin-top: 4px; text-align: center; }
+
+    /* On very short screens, make the game container even smaller */
+    @media (max-height: 700px) { #gameContainer { height: 50vh; min-height: 340px; } }
+    @media (max-height: 600px) { #gameContainer { height: 45vh; min-height: 300px; } }
+  </style>
+
+  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+</head>
+
+<body>
+  <audio id="bgMusic" preload="auto" loop>
+    <source src="Music.mp3" type="audio/mpeg" />
+  </audio>
+  <audio id="bulletSound" preload="auto">
+    <source src="Bullet.mp3" type="audio/mpeg" />
+  </audio>
+  <audio id="moveSound" preload="auto">
+    <source src="Move.mp3" type="audio/mpeg" />
+  </audio>
+  <audio id="crashSound" preload="auto">
+    <source src="Crash.mp3" type="audio/mpeg" />
+  </audio>
+  <audio id="winSound" preload="auto">
+    <source src="Win.mp3" type="audio/mpeg" />
+  </audio>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- START SCREEN -->
+    <div id="startScreen" class="screen">
+      <h1 class="screen-title">DRIVE AND AVOID</h1>
+      <p id="highScoreDisplay">🏆 High Score: 0</p>
+      <div style="max-width:520px; text-align:left; background:rgba(0,0,0,0.45); padding:12px; border-radius:8px;">
+        <h3 style="margin:0 0 6px 0">How to play</h3>
+        <ul style="margin:6px 0 0 18px; padding:0; color:#fff; line-height:1.4">
+          <li>Use LEFT / RIGHT buttons or arrow keys to change lanes</li>
+          <li>Tap SHOOT, or spacebar to fire a triple‑bullet burst and destroy enemy cars</li>
+          <li>Avoid enemy cars and the black orb's projectiles</li>
+          <li>Reach the distance goal to complete each level (20 total)</li>
+          <li>You have 3 lives; each life starts with 100% health</li>
+        </ul>
+        <p class="screen-subtle" style="margin-top:10px">Audio is muted until you click Start Race.</p>
+      </div>
+      <!-- Privacy Policy link (required for submission) -->
+      <p class="screen-subtle" style="margin-top:8px;">
+        <a href="" target="_blank" style="color:var(--gold); text-decoration:underline;"></a>
+      </p>
+      <button id="startBtn" class="screen-btn" style="margin-top:12px;" disabled>START RACE</button>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="gameOverScreen" class="screen" hidden>
+      <h1 class="screen-title">GAME OVER</h1>
+      <p id="finalScore" style="margin:6px 0; font-size:18px">Score: 0</p>
+      <p id="finalLevel" style="margin:6px 0; font-size:16px">Level: 0 / 20</p>
+      <button id="continueBtn" class="screen-btn">▶ CONTINUE </button>
+      <button id="restartBtn" class="screen-btn">↺ RESTART RACE</button>
+      <p class="screen-subtle" style="margin:10px 0 0">Continue keeps your current level & score. Restart starts a new run.</p>
+    </div>
+
+    <!-- WIN SCREEN -->
+    <div id="winScreen" class="screen" hidden>
+      <h1 class="screen-title">YOU WON!</h1>
+      <p id="totalScore" style="margin:6px 0; font-size:24px; color:var(--gold);">Total Score: 0</p>
+      <button id="menuBtn" class="screen-btn" style="margin-top:8px;">GO TO MAIN MENU</button>
+    </div>
+  </div>
+
+  <div id="hudRow">
+    <div id="levelDisplay">Level: 1 / 20</div>
+    <div id="distanceBar"><div id="distanceProgress"></div></div>
+    <div id="scoreDisplay">Score: 0</div>
+  </div>
+
+  <div id="controlsRow">
+    <button id="leftBtn" class="control-btn">← LEFT</button>
+    <button id="rightBtn" class="control-btn">RIGHT →</button>
+    <button id="shootBtn" class="control-btn shoot">SHOOT!</button>
+  </div>
+
+  <div id="livesContainer">
+    <div id="healthBar"><div id="healthProgress"></div></div>
+    <div id="healthText">❤️ 5x: 100%</div>
+  </div>
+
+  <div id="banner-container"></div>
+
+  <div class="note">Touch & hold buttons to move continuously. Tap SHOOT, or spacebar to fire.</div>
+
+  <script>
+    /****************************************************
+     * CONSTANTS & CONFIG
+     ****************************************************/
+    const MAX_LEVEL = 20;
+    const MAX_LIVES = 5;
+    const START_HEALTH = 100;
+    const HEALTH_DECREMENT = 0.5;      // lower = less damage per hit
+    const BASE_ROAD_SPEED = 3;
+    const BASE_ENEMY_SPAWN = 0.008;
+    const LANE_COUNT = 9;
+
+    const LEVEL_DISTANCE_BASE = 3000;
+    const LEVEL_DISTANCE_STEP = 600;
+    const LEVEL_SPEED_STEP = 0.35;
+    const LEVEL_SPAWN_STEP = 0.006;
+
+    const MARKER_GAP = 70;
+    const MARKER_H = 40;
+
+    /****************************************************
+     * DOM LOOKUPS
+     ****************************************************/
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const startScreen = document.getElementById('startScreen');
+    const startBtn = document.getElementById('startBtn');
+
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const continueBtn = document.getElementById('continueBtn');
+    const restartBtn = document.getElementById('restartBtn');
+
+    const winScreen = document.getElementById('winScreen');
+    const menuBtn = document.getElementById('menuBtn');
+
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
+    const shootBtn = document.getElementById('shootBtn');
+
+    const levelDisplay = document.getElementById('levelDisplay');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const distanceProgress = document.getElementById('distanceProgress');
+    const healthProgress = document.getElementById('healthProgress');
+    const healthText = document.getElementById('healthText');
+    const finalScore = document.getElementById('finalScore');
+    const finalLevel = document.getElementById('finalLevel');
+    const totalScore = document.getElementById('totalScore');
+    const highScoreDisplay = document.getElementById('highScoreDisplay');
+
+    const bgMusic = document.getElementById('bgMusic');
+    const bulletSound = document.getElementById('bulletSound');
+    const moveSound = document.getElementById('moveSound');
+    const crashSound = document.getElementById('crashSound');
+    const winSound = document.getElementById('winSound');
+
+    const bannerContainer = document.getElementById('banner-container');
+
+    /****************************************************
+     * RUNTIME STATE
+     ****************************************************/
+    let CANVAS_W = 0, CANVAS_H = 0, ROAD_WIDTH = 0, roadX = 0, laneWidth = 0;
+    let gameRunning = false;
+    let sessionActive = false;
+
+    let level = 1;
+    let score = 0;
+    let lives = MAX_LIVES;
+    let health = START_HEALTH;
+    let distance = 0;
+    let maxDistance = LEVEL_DISTANCE_BASE;
+    let roadSpeed = BASE_ROAD_SPEED;
+    let enemySpawnRate = BASE_ENEMY_SPAWN;
+
+    let enemies = [];
+    let projectiles = [];
+    let roadMarkers = [];
+    let bullets = [];
+    let shootCooldown = 0;
+    const SHOOT_COOLDOWN = 350;
+
+    let orb = {
+      x: 0, y: 70, radius: 20, active: false, dir: 1,
+      speed: 1.6, lastShot: 0, shotInterval: 2000
+    };
+
+    let inputLocked = false;
+    let adInProgress = false;
+    let sdkReady = false;
+    let highScore = 0;
+    let needsAudioResume = false;
+    let lastTime = 0;
+
+    const player = {
+      lane: Math.floor(LANE_COUNT / 2),
+      width: 0,
+      height: 70,
+      get x() { return roadX + this.lane * laneWidth + (laneWidth - this.width)/2; },
+      get y() { return CANVAS_H - 120; },
+      invincible: false
+    };
+
+    const cg = window.CrazyGames ? window.CrazyGames.SDK : null;
+
+    /****************************************************
+     * AUDIO HELPERS
+     ****************************************************/
+    function playSound(snd) {
+      if (adInProgress) return;
+      try { snd.currentTime = 0; snd.play(); } catch (err) {}
+    }
+
+    function softResumeAudio() {
+      if (!bgMusic.paused) return;
+      bgMusic.volume = 0.5;
+      const p = bgMusic.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => { needsAudioResume = true; });
+      }
+    }
+
+    function hardPauseAudio() {
+      try { bgMusic.pause(); } catch (e) {}
+    }
+
+    /****************************************************
+     * BANNER VISIBILITY HELPERS
+     ****************************************************/
+    function showBanner() {
+      bannerContainer.style.display = 'flex';
+    }
+
+    function hideBanner() {
+      bannerContainer.style.display = 'none';
+    }
+
+    /****************************************************
+     * CRAZYGAMES INTEGRATION
+     ****************************************************/
+    function showVideoAd(thenAction) {
+      if (!cg || !sdkReady || !cg.ad) {
+        thenAction();
+        return;
+      }
+      adInProgress = true;
+      gameRunning = false;
+      hardPauseAudio();
+      try {
+        cg.ad.requestAd('midgame')
+          .then(() => { adInProgress = false; thenAction(); })
+          .catch(() => { adInProgress = false; thenAction(); });
+      } catch (e) {
+        adInProgress = false;
+        thenAction();
+      }
+    }
+
+    function saveProgress() {
+      if (!cg || !sdkReady) return;
+      cg.data.save('saveData', { highScore }).catch(e => console.warn('Data save error', e));
+    }
+
+    async function loadProgress() {
+      if (!cg || !sdkReady) return;
+      try {
+        const saved = await cg.data.load('saveData');
+        if (saved && saved.highScore !== undefined) {
+          highScore = saved.highScore || 0;
+          highScoreDisplay.textContent = `🏆 High Score: ${highScore}`;
+        }
+      } catch (e) { console.warn('Data load error', e); }
+    }
+
+    function initBanner() {
+      if (!cg || !sdkReady) return;
+      cg.banner.requestBanner([{ containerId: "banner-container" }])
+        .then(() => {
+          showBanner();
+        })
+        .catch(e => console.warn('Banner request failed', e));
+    }
+
+    function initMute() {
+      if (!cg || !sdkReady || !cg.mute) return;
+      cg.mute.onChange((isMuted) => {
+        bgMusic.muted = isMuted;
+        bulletSound.muted = isMuted;
+        moveSound.muted = isMuted;
+        crashSound.muted = isMuted;
+        winSound.muted = isMuted;
+      });
+    }
+
+    /****************************************************
+     * GEOMETRY / RESIZE
+     ****************************************************/
+    function initGeometry() {
+      const container = document.getElementById('gameContainer');
+      CANVAS_W = container.clientWidth;
+      CANVAS_H = container.clientHeight;
+      canvas.width = CANVAS_W;
+      canvas.height = CANVAS_H;
+
+      ROAD_WIDTH = Math.min(CANVAS_W * 0.9, CANVAS_H * 1.5);
+      ROAD_WIDTH = Math.max(CANVAS_W * 0.8, ROAD_WIDTH);
+      roadX = Math.round((CANVAS_W - ROAD_WIDTH) / 2);
+      laneWidth = ROAD_WIDTH / LANE_COUNT;
+
+      player.width = Math.max(36, laneWidth * 0.78);
+      orb.x = roadX + ROAD_WIDTH / 2;
+      orb.radius = Math.max(15, Math.min(25, laneWidth * 0.5));
+    }
+
+    function initRoadMarkers() {
+      roadMarkers = [];
+      const count = Math.floor(CANVAS_H / MARKER_GAP) + 2;
+      for (let i = 0; i < count; i++) {
+        roadMarkers.push({ y: i * MARKER_GAP - (MARKER_H + 30), h: MARKER_H });
+      }
+    }
+
+    /****************************************************
+     * HUD / UI
+     ****************************************************/
+    function updateHealthUI() {
+      healthProgress.style.width = Math.max(0, Math.min(100, health)) + '%';
+      healthText.textContent = `❤️ ${lives}x: ${health.toFixed(2)}%`;
+      if (health > 50) {
+        healthProgress.style.background = 'linear-gradient(90deg, #4CAF50, #2ecc71)';
+      } else if (health > 20) {
+        healthProgress.style.background = 'linear-gradient(90deg, #f39c12, #f1c40f)';
+      } else {
+        healthProgress.style.background = 'linear-gradient(90deg, #e74c3c, #f39c12)';
+      }
+    }
+
+    function updateHud() {
+      levelDisplay.textContent = `Level: ${Math.min(level, MAX_LEVEL)} / ${MAX_LEVEL}`;
+      scoreDisplay.textContent = `Score: ${score}`;
+      const pct = Math.max(0, Math.min(100, (distance / maxDistance) * 100));
+      distanceProgress.style.width = pct + '%';
+      updateHealthUI();
+    }
+
+    /****************************************************
+     * ENEMIES & PROJECTILES
+     ****************************************************/
+    function spawnEnemy() {
+      const maxEnemies = 4 + Math.floor(level * 0.9);
+      if (enemies.length >= maxEnemies) return;
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      const w = Math.max(36, laneWidth * 0.78);
+      enemies.push({
+        lane: lane,
+        x: roadX + lane * laneWidth + (laneWidth - w) / 2,
+        y: -80 - Math.random() * 80,
+        width: w,
+        height: 56,
+        speed: 3 + Math.random() * 1.5 + level * 0.12,
+        color: ['#e74c3c', '#f39c12', '#9b59b6', '#1abc9c'][Math.floor(Math.random() * 4)],
+        jumping: false,
+        jumpH: 0,
+        jumpDir: 1
+      });
+    }
+
+    function drawCar(x, y, w, h, color) {
+      ctx.fillStyle = color; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#000';
+      const tw = Math.max(6, w * 0.22), th = Math.max(4, h * 0.18);
+      ctx.fillRect(x - tw * 0.6, y + h * 0.18, tw, th);
+      ctx.fillRect(x + w - tw * 0.4, y + h * 0.18, tw, th);
+      ctx.fillRect(x - tw * 0.6, y + h * 0.62, tw, th);
+      ctx.fillRect(x + w - tw * 0.4, y + h * 0.62, tw, th);
+    }
+
+    function drawRoad() {
+      ctx.fillStyle = '#1f2b36'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = '#2f2f2f'; ctx.fillRect(roadX, 0, ROAD_WIDTH, CANVAS_H);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2; ctx.setLineDash([18, 14]);
+      for (let i = 1; i < LANE_COUNT; i++) {
+        const x = roadX + i * laneWidth;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CANVAS_H); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    function drawMarkers() {
+      const mx = roadX + (ROAD_WIDTH - 8) / 2;
+      ctx.fillStyle = '#f1c40f';
+      for (const m of roadMarkers) {
+        m.y += roadSpeed;
+        if (m.y > CANVAS_H) m.y = -m.h;
+        ctx.fillRect(mx, m.y, 8, m.h);
+      }
+    }
+
+    function orbShootBurst() {
+      const count = Math.min(2 + Math.floor(level / 3), 6);
+      const px = player.x + player.width / 2;
+      const py = player.y + player.height / 2;
+      const dx = px - orb.x;
+      const dy = py - orb.y;
+      const baseAngle = Math.atan2(dy, dx);
+      const spread = Math.PI * 0.14;
+      playSound(bulletSound);
+      for (let i = 0; i < count; i++) {
+        const t = count === 1 ? 0.5 : i / (count - 1);
+        const angle = baseAngle - spread / 2 + t * spread;
+        const speed = 3 + level * 0.18;
+        projectiles.push({
+          x: orb.x, y: orb.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          r: Math.max(6, Math.min(10, laneWidth * 0.15)),
+          dmg: HEALTH_DECREMENT * 4
+        });
+      }
+    }
+
+    function updateOrb(dt) {
+      if (!orb.active) return;
+      orb.x += orb.dir * orb.speed;
+      if (orb.x < roadX + orb.radius) orb.dir = 1;
+      if (orb.x > roadX + ROAD_WIDTH - orb.radius) orb.dir = -1;
+      if (Date.now() - orb.lastShot > orb.shotInterval) {
+        orb.lastShot = Date.now();
+        orb.shotInterval = Math.max(600, 1700 - level * 80) + Math.random() * 600;
+        orbShootBurst();
+      }
+    }
+
+    function rectRect(a, b) {
+      return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    }
+
+    function circleRect(c, r) {
+      const distX = Math.abs(c.x - (r.x + r.width / 2));
+      const distY = Math.abs(c.y - (r.y + r.height / 2));
+      if (distX > (r.width / 2 + c.r)) return false;
+      if (distY > (r.height / 2 + c.r)) return false;
+      if (distX <= (r.width / 2) || distY <= (r.height / 2)) return true;
+      const dx = distX - r.width / 2, dy = distY - r.height / 2;
+      return dx * dx + dy * dy <= c.r * c.r;
+    }
+
+    /****************************************************
+     * PLAYER SHOOTING
+     ****************************************************/
+    function shoot() {
+      if (!sessionActive || adInProgress || Date.now() < shootCooldown) return;
+      shootCooldown = Date.now() + SHOOT_COOLDOWN;
+      const startX = player.x + player.width / 2;
+      const startY = player.y;
+      const angles = [
+        -Math.PI / 2,
+        -Math.PI / 2 - 0.25,
+        -Math.PI / 2 + 0.25
+      ];
+      const bulletSpeed = 7 + level * 0.1;
+      for (const angle of angles) {
+        bullets.push({
+          x: startX, y: startY,
+          vx: Math.cos(angle) * bulletSpeed,
+          vy: Math.sin(angle) * bulletSpeed,
+          radius: 5
+        });
+      }
+      playSound(bulletSound);
+    }
+
+    function updateBullets(dt) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx * (dt / 16);
+        b.y += b.vy * (dt / 16);
+        if (b.y < -30 || b.x < -30 || b.x > CANVAS_W + 30) {
+          bullets.splice(i, 1);
+          continue;
+        }
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          const eRect = { x: e.x, y: e.y - e.jumpH, width: e.width, height: e.height };
+          const closestX = Math.max(eRect.x, Math.min(b.x, eRect.x + eRect.width));
+          const closestY = Math.max(eRect.y, Math.min(b.y, eRect.y + eRect.height));
+          const dx = b.x - closestX, dy = b.y - closestY;
+          if (dx * dx + dy * dy <= b.radius * b.radius) {
+            enemies.splice(j, 1);
+            bullets.splice(i, 1);
+            score += 25;
+            playSound(crashSound);
+            hit = true;
+            break;
+          }
+        }
+      }
+    }
+
+    function drawBullets() {
+      for (const b of bullets) {
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+        const grad = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, b.radius * 2);
+        grad.addColorStop(0, 'rgba(241,196,15,0.9)');
+        grad.addColorStop(1, 'rgba(241,196,15,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius * 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    /****************************************************
+     * INPUT
+     ****************************************************/
+    function moveLeft() {
+      if (!sessionActive || inputLocked || adInProgress) return;
+      inputLocked = true;
+      player.lane = Math.max(0, player.lane - 1);
+      playSound(moveSound);
+      setTimeout(() => { inputLocked = false; }, 100);
+    }
+
+    function moveRight() {
+      if (!sessionActive || inputLocked || adInProgress) return;
+      inputLocked = true;
+      player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
+      playSound(moveSound);
+      setTimeout(() => { inputLocked = false; }, 100);
+    }
+
+    /****************************************************
+     * DAMAGE / LIVES / LEVELS
+     ****************************************************/
+    function takeDamage(amount) {
+      if (!sessionActive || player.invincible || adInProgress) return;
+      health = Math.max(0, health - amount);
+      playSound(crashSound);
+      player.invincible = true;
+      setTimeout(() => { player.invincible = false; }, 500);
+      if (health <= 0) {
+        lives--;
+        if (lives <= 0) {
+          endGame(false);
+          return;
+        }
+        health = START_HEALTH;
+      }
+      updateHealthUI();
+    }
+
+    function nextLevel() {
+      level++;
+      if (level > MAX_LEVEL) { endGame(true); return; }
+      distance = 0;
+      maxDistance = LEVEL_DISTANCE_BASE + level * LEVEL_DISTANCE_STEP;
+      roadSpeed = BASE_ROAD_SPEED + level * LEVEL_SPEED_STEP;
+      enemySpawnRate = BASE_ENEMY_SPAWN + level * LEVEL_SPAWN_STEP;
+      orb.active = (level >= 2);
+      if (orb.active) {
+        orb.x = roadX + ROAD_WIDTH / 2;
+        orb.dir = 1; orb.lastShot = Date.now(); orb.speed = 1.6;
+      }
+      initRoadMarkers();
+      spawnEnemy();
+      updateHud();
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+
+    /****************************************************
+     * GAME FLOW
+     ****************************************************/
+    function startRunAfterAd() {
+      initRunState();
+      sessionActive = true;
+      gameRunning = true;
+      hideBanner();                      // no banner during gameplay
+      softResumeAudio();
+      if (cg && sdkReady) cg.game.gameplayStart();
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+
+    function startFromMenu() {
+      hardPauseAudio();
+      sessionActive = false;
+      gameRunning = false;
+      showVideoAd(startRunAfterAd);
+    }
+
+    function restartAfterLoss() {
+      hardPauseAudio();
+      sessionActive = true;
+      gameRunning = true;
+      showVideoAd(startRunAfterAd);
+    }
+
+    function initRunState() {
+      initGeometry();
+      initRoadMarkers();
+      startScreen.hidden = true;
+      gameOverScreen.hidden = true;
+      winScreen.hidden = true;
+      level = 1; score = 0; distance = 0;
+      lives = MAX_LIVES; health = START_HEALTH;
+      maxDistance = LEVEL_DISTANCE_BASE;
+      roadSpeed = BASE_ROAD_SPEED;
+      enemySpawnRate = BASE_ENEMY_SPAWN;
+      enemies = []; projectiles = []; bullets = [];
+      orb.active = false;
+      orb.x = roadX + ROAD_WIDTH / 2;
+      orb.lastShot = Date.now();
+      player.invincible = false;
+      bgMusic.volume = 0.5;
+      softResumeAudio();
+      spawnEnemy();
+      updateHud();
+    }
+
+    function endGame(completed = false) {
+      if (cg && sdkReady) cg.game.gameplayStop();
+      sessionActive = false;
+      gameRunning = true;
+      showBanner();                     // banner on game‑over / win screens
+      if (score > highScore) {
+        highScore = score;
+        highScoreDisplay.textContent = `🏆 High Score: ${highScore}`;
+        saveProgress();
+      }
+      if (completed) {
+        playSound(winSound);
+        totalScore.textContent = `Total Score: ${score}`;
+        winScreen.hidden = false;
+      } else {
+        finalScore.textContent = `Score: ${score}`;
+        finalLevel.textContent = `Level: ${Math.max(1, level)} / ${MAX_LEVEL}`;
+        gameOverScreen.hidden = false;
+      }
+    }
+
+    function continueAfterLoss() {
+      hardPauseAudio();
+      gameOverScreen.hidden = true;
+      hideBanner();                      // hide banner during continue process
+      showVideoAd(revivePlayer);
+    }
+
+    function revivePlayer() {
+      gameOverScreen.hidden = true;
+      startScreen.hidden = true;
+      winScreen.hidden = true;
+      lives = MAX_LIVES;
+      health = START_HEALTH;
+      player.invincible = true;
+      setTimeout(() => { player.invincible = false; }, 1500);
+      enemies = []; projectiles = []; bullets = [];
+      if (orb.active) {
+        orb.x = roadX + ROAD_WIDTH / 2;
+        orb.lastShot = Date.now();
+      }
+      initRoadMarkers();
+      spawnEnemy();
+      sessionActive = true;
+      gameRunning = true;
+      hideBanner();                      // still gameplay – no banner
+      softResumeAudio();
+      if (cg && sdkReady) cg.game.gameplayStart();
+      updateHud();
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+
+    function returnToMenu() {
+      sessionActive = false;
+      gameRunning = false;
+      hardPauseAudio();
+      winScreen.hidden = true;
+      gameOverScreen.hidden = true;
+      startScreen.hidden = false;
+      showBanner();                      // banner back on main menu
+    }
+
+    /****************************************************
+     * MAIN LOOP
+     ****************************************************/
+    function loop(ts) {
+      if (!gameRunning || adInProgress) return;
+      const dt = Math.max(1, ts - lastTime);
+      lastTime = ts;
+      distance += roadSpeed * (dt / 16);
+      if (distance >= maxDistance) {
+        score += 1000 * level;
+        nextLevel();
+        return;
+      }
+      if (Math.random() < enemySpawnRate * (dt / 16)) spawnEnemy();
+
+      updateOrb(dt);
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        const pRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+        if (circleRect({ x: p.x, y: p.y, r: p.r }, pRect)) {
+          takeDamage(p.dmg);
+          projectiles.splice(i, 1);
+          continue;
+        }
+        if (p.y > CANVAS_H + 60 || p.x < -60 || p.x > CANVAS_W + 60) projectiles.splice(i, 1);
+      }
+
+      updateBullets(dt);
+
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        e.y += e.speed * (dt / 16);
+        if (!e.jumping && Math.random() < 0.006) e.jumping = true;
+        if (e.jumping) {
+          e.jumpH += 0.8 * e.jumpDir;
+          if (e.jumpH > 14) e.jumpDir = -1;
+          if (e.jumpH < 0) { e.jumping = false; e.jumpDir = 1; e.jumpH = 0; }
+        }
+        const eRect = { x: e.x, y: e.y - e.jumpH, width: e.width, height: e.height };
+        const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+        if (rectRect(eRect, playerRect)) {
+          takeDamage(HEALTH_DECREMENT * 2);
+          enemies.splice(i, 1);
+          continue;
+        }
+        if (e.y > CANVAS_H + 80) {
+          enemies.splice(i, 1);
+          score += Math.max(1, Math.floor(3 + level * 0.1));
+          updateHud();
+        }
+      }
+
+      ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      drawRoad();
+      drawMarkers();
+
+      if (orb.active) {
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2); ctx.fill();
+        const g = ctx.createRadialGradient(orb.x, orb.y, orb.radius * 0.4, orb.x, orb.y, orb.radius * 2);
+        g.addColorStop(0, 'rgba(120,120,120,0.9)'); g.addColorStop(1, 'rgba(120,120,120,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.radius * 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+
+      for (const p of projectiles) {
+        ctx.beginPath(); ctx.fillStyle = '#f1c40f'; ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+        const grad = ctx.createRadialGradient(p.x, p.y, p.r * 0.3, p.x, p.y, p.r * 1.5);
+        grad.addColorStop(0, 'rgba(241,196,15,0.9)'); grad.addColorStop(1, 'rgba(241,196,15,0)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      drawBullets();
+
+      for (const e of enemies) drawCar(e.x, e.y - e.jumpH, e.width, e.height, e.color);
+
+      if (player.invincible && Math.floor(Date.now() / 100) % 2 === 0) ctx.globalAlpha = 0.5;
+      drawCar(player.x, player.y, player.width, player.height, '#3498db');
+      ctx.globalAlpha = 1;
+
+      updateHud();
+      requestAnimationFrame(loop);
+    }
+
+    /****************************************************
+     * INPUT WIRING
+     ****************************************************/
+    function makeHoldable(button, action) {
+      let timer = null; let isHolding = false;
+      const start = (e) => {
+        e.preventDefault();
+        if (isHolding || adInProgress) return;
+        isHolding = true; action(); playSound(moveSound);
+        timer = setInterval(() => {
+          if (adInProgress) { clearInterval(timer); timer = null; isHolding = false; return; }
+          action(); playSound(moveSound);
+        }, 200);
+      };
+      const end = () => { isHolding = false; if (timer) { clearInterval(timer); timer = null; } };
+      button.addEventListener('mousedown', start);
+      button.addEventListener('touchstart', start, { passive: false });
+      ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(evt => button.addEventListener(evt, end));
+    }
+
+    function wireInputs() {
+      makeHoldable(leftBtn, moveLeft);
+      makeHoldable(rightBtn, moveRight);
+
+      shootBtn.addEventListener('mousedown', (e) => { e.preventDefault(); shoot(); });
+      shootBtn.addEventListener('touchstart', (e) => { e.preventDefault(); shoot(); });
+
+      document.addEventListener('keydown', (e) => {
+        if (!sessionActive || adInProgress) return;
+        if (e.key === 'ArrowLeft') { moveLeft(); playSound(moveSound); }
+        if (e.key === 'ArrowRight') { moveRight(); playSound(moveSound); }
+        if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); shoot(); }
+      });
+
+      startBtn.addEventListener('click', () => { playSound(moveSound); startFromMenu(); });
+      continueBtn.addEventListener('click', () => { playSound(moveSound); continueAfterLoss(); });
+      restartBtn.addEventListener('click', () => { playSound(moveSound); restartAfterLoss(); });
+      menuBtn.addEventListener('click', () => { playSound(moveSound); returnToMenu(); });
+
+      document.body.addEventListener('click', function () {
+        if (needsAudioResume && bgMusic.paused) {
+          bgMusic.play().then(() => { needsAudioResume = false; }).catch(() => {});
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        if (sessionActive) { initGeometry(); initRoadMarkers(); }
+      });
+    }
+
+    /****************************************************
+     * BOOTSTRAP
+     ****************************************************/
+    function boot() {
+      startScreen.hidden = false;
+      gameOverScreen.hidden = true;
+      winScreen.hidden = true;
+
+      initGeometry();
+      initRoadMarkers();
+      updateHud();
+      hardPauseAudio();
+      showBanner();   // banner visible on main menu
+
+      const unlockButtons = () => {
+        startBtn.disabled = false;
+      };
+
+      if (cg) {
+        const fallbackTimer = setTimeout(unlockButtons, 3000);
+        cg.ready
+          .then(() => {
+            clearTimeout(fallbackTimer);
+            sdkReady = true;
+            unlockButtons();
+            loadProgress();
+            initBanner();
+            initMute();
+          })
+          .catch(() => {
+            clearTimeout(fallbackTimer);
+            unlockButtons();
+          });
+      } else {
+        unlockButtons();
+      }
+    }
+
+    wireInputs();
+    boot();
+  </script>
+</body>
+</html>
